@@ -5,10 +5,8 @@ from config import GEMINI_API_KEY
 def analyze_influencer_data(data):
 
     if not GEMINI_API_KEY:
-
-        print("❌ Gemini API 키가 없습니다.")
-
-        return "Gemini API Key missing"
+        print("❌ Gemini API 키 없음")
+        return "Gemini API Key Missing"
 
     try:
 
@@ -21,8 +19,7 @@ def analyze_influencer_data(data):
         )
 
         prompt = f"""
-아래 인플루언서 데이터를 분석해서
-짧은 마케팅 관점 코멘트를 작성해줘.
+아래 인플루언서 데이터를 분석해줘.
 
 데이터:
 {data}
@@ -40,6 +37,6 @@ def analyze_influencer_data(data):
 
     except Exception as e:
 
-        print(f"⚠️ AI 분석 실패: {e}")
+        print(f"⚠️ Gemini 오류: {e}")
 
-        return "AI 분석 일시 오류 (수치는 정상 처리됨)"
+        return "AI 분석 일시 오류"
