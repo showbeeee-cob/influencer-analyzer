@@ -9,7 +9,9 @@ import time
 def run_fake_server():
     port = int(os.environ.get("PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), BaseHTTPRequestHandler)
-    print(f"Fake server started on port {port}")
+
+    print(f"🌐 Fake server started on port {port}")
+
     server.serve_forever()
 
 threading.Thread(
@@ -48,25 +50,49 @@ POLL_INTERVAL_SECONDS = 30
 # -----------------------------
 def process_influencer(url):
 
-    print(f"--- Processing: {url} ---")
+    print("--------------------------------------------------")
+    print(f"🚀 Processing Start: {url}")
+    print("--------------------------------------------------")
 
     # 1. 데이터 수집
     raw_data = scrape_instagram_profile(url)
 
+    print("📦 RAW DATA:")
+    print(raw_data)
+
     if not raw_data:
+
         print("❌ Apify 수집 실패")
+
         return None
 
     # 2. 데이터 추출
     extracted = extract_influencer_data(raw_data)
 
+    print("📦 EXTRACTED DATA:")
+    print(extracted)
+
     if not extracted:
+
         print("❌ 데이터 추출 실패")
+
         return None
 
     followers = extracted.get("followers", 0)
-    profile_image = extracted.get("profile_image", "")
-    posts = extracted.get("posts", [])
+
+    profile_image = extracted.get(
+        "profile_image",
+        ""
+    )
+
+    posts = extracted.get(
+        "posts",
+        []
+    )
+
+    print(f"👥 Followers: {followers}")
+    print(f"🖼️ Profile Image: {profile_image}")
+    print(f"📝 Posts Count: {len(posts)}")
 
     # 3. 평균 계산
     avg_likes = (
@@ -90,6 +116,10 @@ def process_influencer(url):
         ) / len(posts)
     ) if posts else 0
 
+    print(f"❤️ Avg Likes: {avg_likes}")
+    print(f"💬 Avg Comments: {avg_comments}")
+    print(f"🎥 Avg Views: {avg_views}")
+
     # 4. ER 계산
     er = calculate_trimmed_er(
         posts,
@@ -100,17 +130,22 @@ def process_influencer(url):
     # 5. 등급 계산
     grade = grade_influencer(er)
 
-    print(f"✅ ER: {er:.2f}%")
-    print(f"✅ Grade: {grade}")
+    print(f"📊 ER: {er:.2f}%")
+    print(f"🏆 Grade: {grade}")
 
     # 6. AI 분석
     try:
+
+        print("🤖 AI 분석 시작")
 
         ai_comments = analyze_influencer_data({
             "er": er,
             "followers": followers,
             "grade": grade
         })
+
+        print("✅ AI 분석 성공")
+        print(ai_comments)
 
     except Exception as e:
 
@@ -119,7 +154,7 @@ def process_influencer(url):
         ai_comments = "AI 분석 일시 오류"
 
     # 7. 결과 반환
-    return {
+    results = {
 
         "followers": followers,
 
@@ -138,6 +173,11 @@ def process_influencer(url):
         "ai_comments": ai_comments
     }
 
+    print("✅ FINAL RESULTS:")
+    print(results)
+
+    return results
+
 # -----------------------------
 # Polling Loop
 # -----------------------------
@@ -148,6 +188,8 @@ def run_polling():
     while True:
 
         try:
+
+            print("🔄 Checking Google Sheets...")
 
             sheet = get_sheet()
 
@@ -161,6 +203,8 @@ def run_polling():
 
             pending_rows = get_pending_rows(sheet)
 
+            print(f"📋 Pending Rows: {pending_rows}")
+
             if not pending_rows:
 
                 print("⏳ 대기 중...")
@@ -168,9 +212,12 @@ def run_polling():
             for row in pending_rows:
 
                 row_idx = row["row_idx"]
+
                 url = row["url"]
 
+                print("--------------------------------------------------")
                 print(f"📌 Row {row_idx} 처리 시작")
+                print("--------------------------------------------------")
 
                 # 상태 변경
                 sheet.update(
@@ -183,6 +230,8 @@ def run_polling():
 
                 if results:
 
+                    print("✅ update_row 실행")
+
                     update_row(
                         sheet,
                         row_idx,
@@ -193,6 +242,8 @@ def run_polling():
 
                 else:
 
+                    print("❌ results가 None 입니다")
+
                     sheet.update(
                         values=[["FAILED"]],
                         range_name=f"J{row_idx}"
@@ -202,7 +253,10 @@ def run_polling():
 
         except Exception as e:
 
-            print(f"🔥 루프 오류: {e}")
+            print("🔥🔥🔥 루프 전체 오류 🔥🔥🔥")
+            print(e)
+
+        print(f"😴 Sleeping {POLL_INTERVAL_SECONDS} seconds...")
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
@@ -210,4 +264,5 @@ def run_polling():
 # 실행
 # -----------------------------
 if __name__ == "__main__":
+
     run_polling()
