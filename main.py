@@ -1,18 +1,30 @@
 import os
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
 import time
+import threading
+
+from flask import Flask
 
 # -----------------------------
 # Render 포트 체크 통과용 서버
 # -----------------------------
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "OK"
+
+
 def run_fake_server():
+
     port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), BaseHTTPRequestHandler)
 
     print(f"🌐 Fake server started on port {port}")
 
-    server.serve_forever()
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
+
 
 threading.Thread(
     target=run_fake_server,
@@ -54,7 +66,6 @@ def process_influencer(url):
     print(f"🚀 Processing Start: {url}")
     print("--------------------------------------------------")
 
-    # 1. 데이터 수집
     raw_data = scrape_instagram_profile(url)
 
     print("📦 RAW DATA:")
@@ -66,7 +77,6 @@ def process_influencer(url):
 
         return None
 
-    # 2. 데이터 추출
     extracted = extract_influencer_data(raw_data)
 
     print("📦 EXTRACTED DATA:")
@@ -94,7 +104,6 @@ def process_influencer(url):
     print(f"🖼️ Profile Image: {profile_image}")
     print(f"📝 Posts Count: {len(posts)}")
 
-    # 3. 평균 계산
     avg_likes = (
         sum(
             p.get("likesCount", 0)
@@ -120,20 +129,17 @@ def process_influencer(url):
     print(f"💬 Avg Comments: {avg_comments}")
     print(f"🎥 Avg Views: {avg_views}")
 
-    # 4. ER 계산
     er = calculate_trimmed_er(
         posts,
         followers,
         trim_percent=0.1
     )
 
-    # 5. 등급 계산
     grade = grade_influencer(er)
 
     print(f"📊 ER: {er:.2f}%")
     print(f"🏆 Grade: {grade}")
 
-    # 6. AI 분석
     try:
 
         print("🤖 AI 분석 시작")
@@ -153,7 +159,6 @@ def process_influencer(url):
 
         ai_comments = "AI 분석 일시 오류"
 
-    # 7. 결과 반환
     results = {
 
         "followers": followers,
@@ -219,13 +224,11 @@ def run_polling():
                 print(f"📌 Row {row_idx} 처리 시작")
                 print("--------------------------------------------------")
 
-                # 상태 변경
                 sheet.update(
                     values=[["PROCESSING"]],
                     range_name=f"J{row_idx}"
                 )
 
-                # 분석 실행
                 results = process_influencer(url)
 
                 if results:
