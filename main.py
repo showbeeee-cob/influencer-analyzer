@@ -188,8 +188,8 @@ def process_influencer(url):
 # -----------------------------
 def run_polling():
 
-    print("🚀 Polling started...")
-
+    print("🔄 polling loop 실행중")
+    
     while True:
 
         try:
@@ -267,5 +267,7 @@ def run_polling():
 # 실행
 # -----------------------------
 if __name__ == "__main__":
+
+    print("🚀 Polling started...")
 
     run_polling()
