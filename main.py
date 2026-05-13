@@ -31,6 +31,7 @@ threading.Thread(
     daemon=True
 ).start()
 
+time.sleep(2)
 # -----------------------------
 # 모듈 import
 # -----------------------------
