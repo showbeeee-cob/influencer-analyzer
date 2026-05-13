@@ -12,7 +12,7 @@ from apify_scraper import (
     extract_influencer_data
 )
 
-from analyzer import analyze_influencer
+from analyzer import grade_influencer
 
 POLL_INTERVAL_SECONDS = 10
 
