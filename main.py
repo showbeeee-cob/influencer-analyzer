@@ -4,24 +4,14 @@ import threading
 
 from flask import Flask
 
-from sheets_db import (
-    get_sheet,
-    find_triggered_rows,
-    update_row
-)
-
-from apify_scraper import (
-    scrape_instagram_profile,
-    extract_influencer_data
-)
-
+from sheets_db import get_sheet
+from apify_scraper import scrape_instagram_data
 from analyzer import grade_influencer
-
 from ai_generator import generate_ai_comment
 
 
 # ==================================================
-# Flask Server (Render 생존용)
+# Flask 서버 (Render 포트 체크용)
 # ==================================================
 
 app = Flask(__name__)
@@ -32,10 +22,9 @@ def home():
 
 
 def run_server():
-
     port = int(os.environ.get("PORT", 10000))
 
-    print(f"🌐 Server running on {port}")
+    print(f"🌐 Fake server started on port {port}")
 
     app.run(
         host="0.0.0.0",
@@ -43,107 +32,41 @@ def run_server():
     )
 
 
+threading.Thread(
+    target=run_server,
+    daemon=True
+).start()
+
+time.sleep(2)
+
+
 # ==================================================
-# 설정
+# 시트 업데이트 함수
 # ==================================================
 
-POLL_INTERVAL_SECONDS = 15
+def update_row(sheet, row_idx, results):
 
+    values = [[
+        results.get("followers", ""),
+        results.get("avg_likes", ""),
+        results.get("avg_comments", ""),
+        results.get("avg_views", ""),
+        results.get("er", ""),
+        results.get("grade", ""),
+        results.get("ai_comment", ""),
+        False,
+        "DONE",
+        results.get("image_url", "")
+    ]]
 
-# ==================================================
-# 메인 로직
-# ==================================================
-
-def process_row(sheet, row_idx, url):
-
-    print("==================================================")
-    print(f"🚀 Row {row_idx} 처리 시작")
-    print(f"🔗 URL: {url}")
-    print("==================================================")
-
-    raw_data = scrape_instagram_profile(url)
-
-    if not raw_data:
-
-        print("❌ raw_data 없음")
-
-        update_row(
-            sheet,
-            row_idx,
-            {
-                "status": "FAILED"
-            }
-        )
-
-        return
-
-    influencer_data = extract_influencer_data(raw_data)
-
-    if not influencer_data:
-
-        print("❌ influencer_data 없음")
-
-        update_row(
-            sheet,
-            row_idx,
-            {
-                "status": "FAILED"
-            }
-        )
-
-        return
-
-    analyzed = grade_influencer(
-        influencer_data
+    sheet.update(
+        range_name=f"B{row_idx}:K{row_idx}",
+        values=values
     )
 
-    ai_comment = generate_ai_comment(
-        analyzed
-    )
-
-    results = {
-        "followers":
-            analyzed.get("followers", 0),
-
-        "avg_likes":
-            analyzed.get("avg_likes", 0),
-
-        "avg_comments":
-            analyzed.get("avg_comments", 0),
-
-        "avg_views":
-            analyzed.get("avg_views", 0),
-
-        "er":
-            analyzed.get("er", 0),
-
-        "grade":
-            analyzed.get("grade", "C"),
-
-        "ai_comment":
-            ai_comment,
-
-        "profile_image":
-            influencer_data.get(
-                "profile_image",
-                ""
-            ),
-
-        "status":
-            "DONE"
-    }
-
-    update_row(
-        sheet,
-        row_idx,
-        results
-    )
-
-    print(f"✅ Row {row_idx} 완료")
-
 
 # ==================================================
-# Polling Loop
+# 메인 폴링 함수
 # ==================================================
 
 def run_polling():
@@ -154,46 +77,75 @@ def run_polling():
 
         try:
 
-            print("🔍 checking rows...")
-
             sheet = get_sheet()
+            rows = sheet.get_all_values()
 
-            rows = find_triggered_rows(sheet)
+            for idx, row in enumerate(rows[1:], start=2):
 
-            print(f"📦 triggered rows: {len(rows)}")
+                trigger = row[8]
 
-            for row in rows:
+                if str(trigger).upper() != "TRUE":
+                    continue
+
+                url = row[0]
+
+                print(f"🔥 Processing Row {idx}")
+                print(f"🔗 URL: {url}")
 
                 try:
 
-                    row_idx = row["row_idx"]
-                    url = row["url"]
+                    data = scrape_instagram_data(url)
 
-                    process_row(
-                        sheet,
-                        row_idx,
-                        url
+                    grade = grade_influencer(
+                        data["followers"],
+                        data["avg_likes"],
+                        data["avg_comments"]
                     )
+
+                    ai_comment = generate_ai_comment(
+                        grade,
+                        data["followers"],
+                        data["er"]
+                    )
+
+                    results = {
+                        "followers": data["followers"],
+                        "avg_likes": data["avg_likes"],
+                        "avg_comments": data["avg_comments"],
+                        "avg_views": data["avg_views"],
+                        "er": data["er"],
+                        "grade": grade,
+                        "ai_comment": ai_comment,
+                        "image_url": data["image_url"]
+                    }
+
+                    update_row(
+                        sheet,
+                        idx,
+                        results
+                    )
+
+                    print(f"✅ Row {idx} 완료")
 
                 except Exception as e:
 
-                    print("🔥 row 처리 오류")
+                    print(f"❌ Row {idx} 처리 오류")
                     print(e)
 
-            print(f"😴 sleeping {POLL_INTERVAL_SECONDS}s")
+                    sheet.update(
+                        range_name=f"J{idx}",
+                        values=[["FAILED"]]
+                    )
 
-            time.sleep(
-                POLL_INTERVAL_SECONDS
-            )
+            print("😴 sleeping...")
+            time.sleep(10)
 
         except Exception as e:
 
-            print("🔥 polling 전체 오류")
+            print("🔥 루프 전체 오류")
             print(e)
 
-            time.sleep(
-                POLL_INTERVAL_SECONDS
-            )
+            time.sleep(10)
 
 
 # ==================================================
@@ -201,10 +153,4 @@ def run_polling():
 # ==================================================
 
 if __name__ == "__main__":
-
-    threading.Thread(
-        target=run_polling,
-        daemon=True
-    ).start()
-
-    run_server()
+    run_polling()
