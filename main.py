@@ -1,9 +1,12 @@
 import os
 import time
+import threading
+
+from flask import Flask
 
 from sheets_db import (
     get_sheet,
-    get_pending_rows,
+    find_triggered_rows,
     update_row
 )
 
@@ -14,8 +17,134 @@ from apify_scraper import (
 
 from analyzer import grade_influencer
 
-POLL_INTERVAL_SECONDS = 10
+from ai_generator import generate_ai_comment
 
+
+# ==================================================
+# Flask Server (Render 생존용)
+# ==================================================
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "OK"
+
+
+def run_server():
+
+    port = int(os.environ.get("PORT", 10000))
+
+    print(f"🌐 Server running on {port}")
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
+
+
+# ==================================================
+# 설정
+# ==================================================
+
+POLL_INTERVAL_SECONDS = 15
+
+
+# ==================================================
+# 메인 로직
+# ==================================================
+
+def process_row(sheet, row_idx, url):
+
+    print("==================================================")
+    print(f"🚀 Row {row_idx} 처리 시작")
+    print(f"🔗 URL: {url}")
+    print("==================================================")
+
+    raw_data = scrape_instagram_profile(url)
+
+    if not raw_data:
+
+        print("❌ raw_data 없음")
+
+        update_row(
+            sheet,
+            row_idx,
+            {
+                "status": "FAILED"
+            }
+        )
+
+        return
+
+    influencer_data = extract_influencer_data(raw_data)
+
+    if not influencer_data:
+
+        print("❌ influencer_data 없음")
+
+        update_row(
+            sheet,
+            row_idx,
+            {
+                "status": "FAILED"
+            }
+        )
+
+        return
+
+    analyzed = grade_influencer(
+        influencer_data
+    )
+
+    ai_comment = generate_ai_comment(
+        analyzed
+    )
+
+    results = {
+        "followers":
+            analyzed.get("followers", 0),
+
+        "avg_likes":
+            analyzed.get("avg_likes", 0),
+
+        "avg_comments":
+            analyzed.get("avg_comments", 0),
+
+        "avg_views":
+            analyzed.get("avg_views", 0),
+
+        "er":
+            analyzed.get("er", 0),
+
+        "grade":
+            analyzed.get("grade", "C"),
+
+        "ai_comment":
+            ai_comment,
+
+        "profile_image":
+            influencer_data.get(
+                "profile_image",
+                ""
+            ),
+
+        "status":
+            "DONE"
+    }
+
+    update_row(
+        sheet,
+        row_idx,
+        results
+    )
+
+    print(f"✅ Row {row_idx} 완료")
+
+
+# ==================================================
+# Polling Loop
+# ==================================================
 
 def run_polling():
 
@@ -25,101 +154,57 @@ def run_polling():
 
         try:
 
+            print("🔍 checking rows...")
+
             sheet = get_sheet()
 
-            if not sheet:
+            rows = find_triggered_rows(sheet)
 
-                print("❌ sheet 연결 실패")
+            print(f"📦 triggered rows: {len(rows)}")
 
-                time.sleep(POLL_INTERVAL_SECONDS)
-                continue
-
-            pending_rows = get_pending_rows(sheet)
-
-            print(f"📄 pending rows: {pending_rows}")
-
-            if not pending_rows:
-
-                print("😴 처리할 데이터 없음")
-
-            for row in pending_rows:
-
-                row_idx = row["row_idx"]
-                url = row["url"]
-
-                print("===================================")
-                print(f"🚀 Row {row_idx} 처리 시작")
-                print(f"🔗 URL: {url}")
-                print("===================================")
+            for row in rows:
 
                 try:
 
-                    raw_data = scrape_instagram_profile(url)
+                    row_idx = row["row_idx"]
+                    url = row["url"]
 
-                    print("📦 raw_data:")
-                    print(raw_data)
-
-                    extracted = extract_influencer_data(raw_data)
-
-                    print("📊 extracted:")
-                    print(extracted)
-
-                    if not extracted:
-
-                        print("❌ extracted 실패")
-
-                        sheet.update(
-                            range_name=f"J{row_idx}",
-                            values=[["FAILED"]]
-                        )
-
-                        continue
-
-                    results = analyze_influencer(extracted)
-
-                    print("🧠 analyze results:")
-                    print(results)
-
-                    if not results:
-
-                        print("❌ results 실패")
-
-                        sheet.update(
-                            range_name=f"J{row_idx}",
-                            values=[["FAILED"]]
-                        )
-
-                        continue
-
-                    update_row(
+                    process_row(
                         sheet,
                         row_idx,
-                        results
+                        url
                     )
-
-                    print(f"✅ Row {row_idx} 완료")
 
                 except Exception as e:
 
-                    print(f"🔥 Row {row_idx} 처리 오류")
+                    print("🔥 row 처리 오류")
                     print(e)
 
-                    sheet.update(
-                        range_name=f"J{row_idx}",
-                        values=[["FAILED"]]
-                    )
+            print(f"😴 sleeping {POLL_INTERVAL_SECONDS}s")
 
-            print(f"😴 Sleeping {POLL_INTERVAL_SECONDS} seconds...")
-            time.sleep(POLL_INTERVAL_SECONDS)
+            time.sleep(
+                POLL_INTERVAL_SECONDS
+            )
 
         except Exception as e:
 
-            print("🔥 루프 전체 오류")
+            print("🔥 polling 전체 오류")
             print(e)
 
-            time.sleep(POLL_INTERVAL_SECONDS)
+            time.sleep(
+                POLL_INTERVAL_SECONDS
+            )
 
+
+# ==================================================
+# 실행
+# ==================================================
 
 if __name__ == "__main__":
 
-    run_polling()
+    threading.Thread(
+        target=run_polling,
+        daemon=True
+    ).start()
+
+    run_server()
