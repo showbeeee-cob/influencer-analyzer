@@ -1,3 +1,8 @@
-.env
-credentials.json
 __pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+service-account.json
+*.log
+.DS_Store

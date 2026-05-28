@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: instagram-influencer-automation
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120 --access-logfile - --error-logfile -
+    healthCheckPath: /health
+    envVars:
+      - key: LOG_LEVEL
+        value: INFO
+      - key: POLLING_INTERVAL_SECONDS
+        value: 10
